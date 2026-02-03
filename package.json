@@ -1,0 +1,14 @@
+{
+  "name": "dl-network",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter dashboard dev",
+    "build": "pnpm --filter dashboard build",
+    "lint": "pnpm -r lint",
+    "db:migrate": "supabase db push",
+    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > packages/supabase/types.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
