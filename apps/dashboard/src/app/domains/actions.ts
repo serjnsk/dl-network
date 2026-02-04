@@ -316,13 +316,24 @@ export async function syncDomainsFromCloudflare(): Promise<ActionState & { impor
 
             const { error } = await supabase.from('domains').insert({
                 domain_name: zone.name,
-                dns_status: zone.status === 'active' ? 'active' : 'pending',
+                dns_status: zone.status?.toLowerCase() === 'active' ? 'active' : 'pending',
             });
 
             if (!error) {
                 imported++;
             } else {
                 skipped++;
+            }
+        }
+
+        // Also update status for existing domains
+        for (const zone of zones) {
+            if (existingSet.has(zone.name)) {
+                const newStatus = zone.status?.toLowerCase() === 'active' ? 'active' : 'pending';
+                await supabase
+                    .from('domains')
+                    .update({ dns_status: newStatus })
+                    .eq('domain_name', zone.name);
             }
         }
 
