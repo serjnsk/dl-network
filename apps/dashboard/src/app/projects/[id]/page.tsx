@@ -12,6 +12,7 @@ import {
     Pencil,
 } from 'lucide-react';
 import { DeleteButton, PublishButton } from './buttons';
+import { DomainManager } from './domain-manager';
 
 interface ProjectPageProps {
     params: Promise<{ id: string }>;
@@ -50,6 +51,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     if (error || !project) {
         notFound();
     }
+
+    // Load all domains for domain picker
+    const { data: allDomains } = await supabase
+        .from('domains')
+        .select('id, domain_name, dns_status')
+        .order('domain_name');
 
     const statusColors = {
         draft: 'bg-gray-100 text-gray-600',
@@ -210,35 +217,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                             <Globe className="h-5 w-5" />
                             Домены
                         </h2>
-                        {project.project_domains?.length > 0 ? (
-                            <ul className="space-y-2">
-                                {project.project_domains.map((pd: { id: string; is_primary: boolean; domains: { domain_name: string } }) => (
-                                    <li key={pd.id} className="flex items-center justify-between">
-                                        <a
-                                            href={`https://${pd.domains.domain_name}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-                                        >
-                                            {pd.domains.domain_name}
-                                            <ExternalLink className="h-3 w-3" />
-                                        </a>
-                                        {pd.is_primary && (
-                                            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-600">
-                                                Основной
-                                            </span>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Домены не привязаны
-                            </p>
-                        )}
-                        <button className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-                            + Добавить домен
-                        </button>
+                        <DomainManager
+                            projectId={id}
+                            projectDomains={project.project_domains || []}
+                            availableDomains={allDomains || []}
+                        />
                     </div>
 
                     {/* Danger Zone */}
