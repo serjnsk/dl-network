@@ -14,9 +14,31 @@ import {
 import { DeleteButton, PublishButton } from './buttons';
 import { DomainManager } from './domain-manager';
 
+// Block type helpers
+const BLOCK_CONFIG: Record<string, { label: string; icon: string }> = {
+    hero: { label: 'Hero секция', icon: '🚀' },
+    features: { label: 'Преимущества', icon: '⭐' },
+    cta: { label: 'Призыв к действию', icon: '📢' },
+    footer: { label: 'Подвал', icon: '📋' },
+    gallery: { label: 'Галерея', icon: '🖼️' },
+    testimonials: { label: 'Отзывы', icon: '💬' },
+    pricing: { label: 'Цены', icon: '💰' },
+    faq: { label: 'FAQ', icon: '❓' },
+    contact: { label: 'Контакты', icon: '📧' },
+};
+
+function getBlockLabel(type: string): string {
+    return BLOCK_CONFIG[type]?.label || type;
+}
+
+function getBlockIcon(type: string): string {
+    return BLOCK_CONFIG[type]?.icon || '📦';
+}
+
 interface ProjectPageProps {
     params: Promise<{ id: string }>;
 }
+
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
     const { id } = await params;
@@ -27,7 +49,17 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         .select(
             `
       *,
-      templates (id, name, slug),
+      templates (
+        id, 
+        name, 
+        slug,
+        template_blocks (
+          id,
+          block_type,
+          block_order,
+          default_content
+        )
+      ),
       project_domains (
         id,
         is_primary,
@@ -50,6 +82,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
     if (error || !project) {
         notFound();
+    }
+
+    // Sort template blocks by order
+    if (project.templates?.template_blocks) {
+        project.templates.template_blocks.sort(
+            (a: { block_order: number }, b: { block_order: number }) => a.block_order - b.block_order
+        );
     }
 
     // Load all domains for domain picker
@@ -181,38 +220,59 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                             Контент
                         </h2>
                         {project.templates ? (
-                            project.project_content?.length > 0 ? (
+                            project.templates.template_blocks?.length > 0 ? (
                                 <div className="space-y-3">
-                                    {project.project_content.map((block: { id: string; block_type: string; page_slug: string }) => (
-                                        <div
-                                            key={block.id}
-                                            className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900"
-                                        >
-                                            <div>
-                                                <span className="font-medium text-gray-900 dark:text-white">
-                                                    {block.block_type}
-                                                </span>
-                                                <span className="ml-2 text-sm text-gray-500">
-                                                    ({block.page_slug})
-                                                </span>
+                                    {project.templates.template_blocks.map((block: {
+                                        id: string;
+                                        block_type: string;
+                                        block_order: number;
+                                        default_content: Record<string, unknown>;
+                                    }) => {
+                                        // Check if this block has custom content
+                                        const customContent = project.project_content?.find(
+                                            (c: { block_type: string }) => c.block_type === block.block_type
+                                        );
+                                        const hasContent = !!customContent;
+
+                                        return (
+                                            <div
+                                                key={block.id}
+                                                className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">
+                                                        {getBlockIcon(block.block_type)}
+                                                    </span>
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">
+                                                            {getBlockLabel(block.block_type)}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            {hasContent ? (
+                                                                <span className="text-green-600">✓ Заполнено</span>
+                                                            ) : (
+                                                                <span className="text-gray-400">По умолчанию</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+                                                    Редактировать
+                                                </button>
                                             </div>
-                                            <button className="text-sm text-blue-600 hover:underline">
-                                                Редактировать
-                                            </button>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
-                                <div className="space-y-3">
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                                        Шаблон: <span className="font-medium text-gray-900">{project.templates.name}</span>
+                                <div className="text-center py-8">
+                                    <p className="text-sm text-gray-500 mb-2">
+                                        Шаблон не содержит блоков
                                     </p>
                                     <Link
                                         href={`/templates/${project.templates.id}`}
-                                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                                        className="text-sm text-blue-600 hover:underline"
                                     >
-                                        <Settings className="h-4 w-4" />
-                                        Редактировать блоки шаблона
+                                        Добавить блоки в шаблон
                                     </Link>
                                 </div>
                             )
