@@ -284,3 +284,52 @@ export async function addCustomDomainToCloudflare(
         return { error: err instanceof Error ? err.message : 'Ошибка Cloudflare API' };
     }
 }
+
+// Sync domains from Cloudflare (import zones)
+export async function syncDomainsFromCloudflare(): Promise<ActionState & { imported?: number; skipped?: number }> {
+    const supabase = await createAdminClient();
+
+    try {
+        // Fetch all zones from Cloudflare
+        const zones = await cloudflareClient.listZones();
+
+        if (!zones || zones.length === 0) {
+            return { success: true, imported: 0, skipped: 0 };
+        }
+
+        // Get existing domains to avoid duplicates
+        const { data: existingDomains } = await supabase
+            .from('domains')
+            .select('domain_name');
+
+        const existingSet = new Set(existingDomains?.map((d) => d.domain_name) || []);
+
+        let imported = 0;
+        let skipped = 0;
+
+        // Insert new domains
+        for (const zone of zones) {
+            if (existingSet.has(zone.name)) {
+                skipped++;
+                continue;
+            }
+
+            const { error } = await supabase.from('domains').insert({
+                domain_name: zone.name,
+                dns_status: zone.status === 'active' ? 'active' : 'pending',
+            });
+
+            if (!error) {
+                imported++;
+            } else {
+                skipped++;
+            }
+        }
+
+        revalidatePath('/domains');
+        return { success: true, imported, skipped };
+    } catch (err) {
+        return { error: err instanceof Error ? err.message : 'Ошибка синхронизации с Cloudflare' };
+    }
+}
+
