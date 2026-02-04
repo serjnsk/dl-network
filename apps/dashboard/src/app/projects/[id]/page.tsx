@@ -180,27 +180,42 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
                             Контент
                         </h2>
-                        {project.project_content?.length > 0 ? (
-                            <div className="space-y-3">
-                                {project.project_content.map((block: { id: string; block_type: string; page_slug: string }) => (
-                                    <div
-                                        key={block.id}
-                                        className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900"
-                                    >
-                                        <div>
-                                            <span className="font-medium text-gray-900 dark:text-white">
-                                                {block.block_type}
-                                            </span>
-                                            <span className="ml-2 text-sm text-gray-500">
-                                                ({block.page_slug})
-                                            </span>
+                        {project.templates ? (
+                            project.project_content?.length > 0 ? (
+                                <div className="space-y-3">
+                                    {project.project_content.map((block: { id: string; block_type: string; page_slug: string }) => (
+                                        <div
+                                            key={block.id}
+                                            className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900"
+                                        >
+                                            <div>
+                                                <span className="font-medium text-gray-900 dark:text-white">
+                                                    {block.block_type}
+                                                </span>
+                                                <span className="ml-2 text-sm text-gray-500">
+                                                    ({block.page_slug})
+                                                </span>
+                                            </div>
+                                            <button className="text-sm text-blue-600 hover:underline">
+                                                Редактировать
+                                            </button>
                                         </div>
-                                        <button className="text-sm text-blue-600 hover:underline">
-                                            Редактировать
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        Шаблон: <span className="font-medium text-gray-900">{project.templates.name}</span>
+                                    </p>
+                                    <Link
+                                        href={`/templates/${project.templates.id}`}
+                                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                                    >
+                                        <Settings className="h-4 w-4" />
+                                        Редактировать блоки шаблона
+                                    </Link>
+                                </div>
+                            )
                         ) : (
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                                 Контент пока не добавлен. Выберите шаблон для начала.
