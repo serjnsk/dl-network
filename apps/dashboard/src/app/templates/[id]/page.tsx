@@ -2,9 +2,10 @@ import { DashboardLayout } from '@/components/layout';
 import { createAdminClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Check, X, LayoutTemplate, Boxes } from 'lucide-react';
+import { ArrowLeft, Pencil, Check, X, LayoutTemplate, Boxes, Wand2 } from 'lucide-react';
 import { DeleteButton, ToggleActiveButton } from './buttons';
 import { BlockList } from './block-list';
+import { StitchPromptGenerator } from './stitch-prompt-generator';
 
 interface TemplatePageProps {
     params: Promise<{ id: string }>;
@@ -102,6 +103,16 @@ export default async function TemplatePage({ params }: TemplatePageProps) {
 
                         <BlockList templateId={template.id} blocks={blocks} />
                     </div>
+
+                    {/* Stitch Prompt Generator */}
+                    {blocks.length > 0 && (
+                        <div className="mt-6">
+                            <StitchPromptGenerator
+                                templateName={template.name}
+                                blocks={blocks}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Sidebar */}
