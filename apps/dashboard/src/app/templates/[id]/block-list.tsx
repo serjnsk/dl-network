@@ -2,7 +2,24 @@
 
 import { useState, useTransition } from 'react';
 import { Plus, Trash2, GripVertical, Loader2 } from 'lucide-react';
-import { addTemplateBlock, removeTemplateBlock } from '../actions';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { addTemplateBlock, removeTemplateBlock, reorderTemplateBlocks } from '../actions';
 
 interface Block {
     id: string;
@@ -75,9 +92,82 @@ const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     },
 };
 
-export function BlockList({ templateId, blocks }: BlockListProps) {
+// Sortable Block Item Component
+function SortableBlockItem({
+    block,
+    onRemove,
+    isPending,
+    getBlockLabel,
+    getBlockIcon,
+}: {
+    block: Block;
+    onRemove: (id: string) => void;
+    isPending: boolean;
+    getBlockLabel: (type: string) => string;
+    getBlockIcon: (type: string) => string;
+}) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: block.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center gap-3 rounded-lg border bg-white px-4 py-3 ${isDragging ? 'border-blue-400 shadow-lg' : 'border-gray-200'
+                }`}
+        >
+            <button
+                {...attributes}
+                {...listeners}
+                className="cursor-grab touch-none text-gray-400 hover:text-gray-600 active:cursor-grabbing"
+            >
+                <GripVertical className="h-4 w-4" />
+            </button>
+            <span className="text-xl">{getBlockIcon(block.block_type)}</span>
+            <div className="flex-1">
+                <p className="font-medium text-gray-900">
+                    {getBlockLabel(block.block_type)}
+                </p>
+                <p className="text-xs text-gray-500">{block.block_type}</p>
+            </div>
+            <button
+                onClick={() => onRemove(block.id)}
+                disabled={isPending}
+                className="rounded p-1 text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-50"
+            >
+                {isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                    <Trash2 className="h-4 w-4" />
+                )}
+            </button>
+        </li>
+    );
+}
+
+export function BlockList({ templateId, blocks: initialBlocks }: BlockListProps) {
     const [isPending, startTransition] = useTransition();
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [blocks, setBlocks] = useState(initialBlocks);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     const handleAddBlock = (blockType: string) => {
         setShowAddMenu(false);
@@ -92,6 +182,23 @@ export function BlockList({ templateId, blocks }: BlockListProps) {
         });
     };
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            const oldIndex = blocks.findIndex((b) => b.id === active.id);
+            const newIndex = blocks.findIndex((b) => b.id === over.id);
+
+            const newBlocks = arrayMove(blocks, oldIndex, newIndex);
+            setBlocks(newBlocks);
+
+            // Save new order to database
+            startTransition(async () => {
+                await reorderTemplateBlocks(templateId, newBlocks.map((b) => b.id));
+            });
+        }
+    };
+
     const getBlockLabel = (type: string) => {
         return AVAILABLE_BLOCKS.find((b) => b.type === type)?.label || type;
     };
@@ -103,43 +210,38 @@ export function BlockList({ templateId, blocks }: BlockListProps) {
     return (
         <div className="space-y-3">
             {blocks.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-gray-300 py-8 text-center dark:border-gray-700">
-                    <p className="mb-2 text-gray-500 dark:text-gray-400">
+                <div className="rounded-lg border-2 border-dashed border-gray-300 py-8 text-center">
+                    <p className="mb-2 text-gray-500">
                         Блоки ещё не добавлены
                     </p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                    <p className="text-sm text-gray-400">
                         Добавьте блоки для формирования структуры шаблона
                     </p>
                 </div>
             ) : (
-                <ul className="space-y-2">
-                    {blocks.map((block) => (
-                        <li
-                            key={block.id}
-                            className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900"
-                        >
-                            <GripVertical className="h-4 w-4 cursor-grab text-gray-400" />
-                            <span className="text-xl">{getBlockIcon(block.block_type)}</span>
-                            <div className="flex-1">
-                                <p className="font-medium text-gray-900 dark:text-white">
-                                    {getBlockLabel(block.block_type)}
-                                </p>
-                                <p className="text-xs text-gray-500">{block.block_type}</p>
-                            </div>
-                            <button
-                                onClick={() => handleRemoveBlock(block.id)}
-                                disabled={isPending}
-                                className="rounded p-1 text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-50"
-                            >
-                                {isPending ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                )}
-                            </button>
-                        </li>
-                    ))}
-                </ul>
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={blocks.map((b) => b.id)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <ul className="space-y-2">
+                            {blocks.map((block) => (
+                                <SortableBlockItem
+                                    key={block.id}
+                                    block={block}
+                                    onRemove={handleRemoveBlock}
+                                    isPending={isPending}
+                                    getBlockLabel={getBlockLabel}
+                                    getBlockIcon={getBlockIcon}
+                                />
+                            ))}
+                        </ul>
+                    </SortableContext>
+                </DndContext>
             )}
 
             {/* Add Block Button */}
@@ -147,23 +249,23 @@ export function BlockList({ templateId, blocks }: BlockListProps) {
                 <button
                     onClick={() => setShowAddMenu(!showAddMenu)}
                     disabled={isPending}
-                    className="w-full rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50 dark:border-gray-700"
+                    className="w-full rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
                 >
                     <Plus className="mr-2 inline h-4 w-4" />
                     Добавить блок
                 </button>
 
                 {showAddMenu && (
-                    <div className="absolute left-0 right-0 top-full z-10 mt-2 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                    <div className="absolute left-0 right-0 top-full z-10 mt-2 rounded-lg border border-gray-200 bg-white shadow-lg">
                         <div className="max-h-64 overflow-auto p-2">
                             {AVAILABLE_BLOCKS.map((block) => (
                                 <button
                                     key={block.type}
                                     onClick={() => handleAddBlock(block.type)}
-                                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100"
                                 >
                                     <span className="text-lg">{block.icon}</span>
-                                    <span className="text-gray-900 dark:text-white">
+                                    <span className="text-gray-900">
                                         {block.label}
                                     </span>
                                 </button>
