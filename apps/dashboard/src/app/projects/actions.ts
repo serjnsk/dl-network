@@ -107,32 +107,16 @@ export async function deleteProject(projectId: string): Promise<ActionState> {
 }
 
 // Publish Project
-export async function publishProject(projectId: string): Promise<ActionState> {
-    const supabase = await createAdminClient();
+export async function publishProject(projectId: string): Promise<ActionState & { deploymentUrl?: string }> {
+    const { deployProject } = await import('@/lib/deploy');
 
-    // Update status to building
-    const { error: updateError } = await supabase
-        .from('projects')
-        .update({ status: 'building' })
-        .eq('id', projectId);
+    const result = await deployProject(projectId);
 
-    if (updateError) {
-        return { error: updateError.message };
-    }
-
-    // TODO: Trigger Cloudflare Pages deployment
-    // For now, just mark as published after a delay simulation
-
-    const { error: publishError } = await supabase
-        .from('projects')
-        .update({ status: 'published' })
-        .eq('id', projectId);
-
-    if (publishError) {
-        return { error: publishError.message };
+    if (!result.success) {
+        return { error: result.error || 'Ошибка деплоя' };
     }
 
     revalidatePath('/projects');
     revalidatePath(`/projects/${projectId}`);
-    return { success: true };
+    return { success: true, deploymentUrl: result.projectUrl };
 }

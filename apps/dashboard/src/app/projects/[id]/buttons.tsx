@@ -67,14 +67,21 @@ interface PublishButtonProps {
 
 export function PublishButton({ projectId, status }: PublishButtonProps) {
     const [isPending, startTransition] = useTransition();
+    const [result, setResult] = useState<{ error?: string; url?: string } | null>(null);
 
     const handlePublish = () => {
+        setResult(null);
         startTransition(async () => {
-            await publishProject(projectId);
+            const res = await publishProject(projectId);
+            if (res.error) {
+                setResult({ error: res.error });
+            } else if (res.deploymentUrl) {
+                setResult({ url: res.deploymentUrl });
+            }
         });
     };
 
-    if (status === 'building') {
+    if (status === 'building' || isPending) {
         return (
             <button
                 disabled
@@ -87,17 +94,28 @@ export function PublishButton({ projectId, status }: PublishButtonProps) {
     }
 
     return (
-        <button
-            onClick={handlePublish}
-            disabled={isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-        >
-            {isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-                <Rocket className="h-4 w-4" />
+        <div className="flex flex-col items-end gap-2">
+            {result?.error && (
+                <span className="text-sm text-red-600">{result.error}</span>
             )}
-            {status === 'published' ? 'Переопубликовать' : 'Опубликовать'}
-        </button>
+            {result?.url && (
+                <a
+                    href={result.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-green-600 hover:underline"
+                >
+                    ✓ Опубликован: {result.url}
+                </a>
+            )}
+            <button
+                onClick={handlePublish}
+                disabled={isPending}
+                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+            >
+                <Rocket className="h-4 w-4" />
+                {status === 'published' ? 'Переопубликовать' : 'Опубликовать'}
+            </button>
+        </div>
     );
 }
