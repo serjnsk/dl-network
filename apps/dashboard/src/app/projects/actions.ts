@@ -120,3 +120,89 @@ export async function publishProject(projectId: string): Promise<ActionState & {
     revalidatePath(`/projects/${projectId}`);
     return { success: true, deploymentUrl: result.projectUrl };
 }
+
+// Save Block Content
+export async function saveBlockContent(
+    projectId: string,
+    blockType: string,
+    content: Record<string, unknown>,
+    pageSlug: string = 'home'
+): Promise<ActionState> {
+    const supabase = await createAdminClient();
+
+    // Check if content already exists for this block
+    const { data: existing } = await supabase
+        .from('project_content')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('block_type', blockType)
+        .eq('page_slug', pageSlug)
+        .single();
+
+    if (existing) {
+        // Update existing content
+        const { error } = await supabase
+            .from('project_content')
+            .update({ content })
+            .eq('id', existing.id);
+
+        if (error) {
+            return { error: error.message };
+        }
+    } else {
+        // Get the next block order
+        const { data: maxOrder } = await supabase
+            .from('project_content')
+            .select('block_order')
+            .eq('project_id', projectId)
+            .eq('page_slug', pageSlug)
+            .order('block_order', { ascending: false })
+            .limit(1)
+            .single();
+
+        const nextOrder = (maxOrder?.block_order ?? -1) + 1;
+
+        // Insert new content
+        const { error } = await supabase
+            .from('project_content')
+            .insert({
+                project_id: projectId,
+                block_type: blockType,
+                page_slug: pageSlug,
+                block_order: nextOrder,
+                content,
+            });
+
+        if (error) {
+            return { error: error.message };
+        }
+    }
+
+    revalidatePath(`/projects/${projectId}`);
+    return { success: true };
+}
+
+// Get Block Content
+export async function getBlockContent(
+    projectId: string,
+    blockType: string,
+    pageSlug: string = 'home'
+): Promise<{ content: Record<string, unknown> | null; error?: string }> {
+    const supabase = await createAdminClient();
+
+    const { data, error } = await supabase
+        .from('project_content')
+        .select('content')
+        .eq('project_id', projectId)
+        .eq('block_type', blockType)
+        .eq('page_slug', pageSlug)
+        .single();
+
+    if (error && error.code !== 'PGRST116') {
+        // PGRST116 = no rows found (not an error in our case)
+        return { content: null, error: error.message };
+    }
+
+    return { content: (data?.content as Record<string, unknown>) || null };
+}
+

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { DeleteButton, PublishButton } from './buttons';
 import { DomainManager } from './domain-manager';
+import { ProjectBlockList } from './project-block-list';
 
 // Block type helpers
 const BLOCK_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -221,48 +222,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                         </h2>
                         {project.templates ? (
                             project.templates.template_blocks?.length > 0 ? (
-                                <div className="space-y-3">
-                                    {project.templates.template_blocks.map((block: {
-                                        id: string;
-                                        block_type: string;
-                                        block_order: number;
-                                        default_content: Record<string, unknown>;
-                                    }) => {
-                                        // Check if this block has custom content
-                                        const customContent = project.project_content?.find(
-                                            (c: { block_type: string }) => c.block_type === block.block_type
-                                        );
-                                        const hasContent = !!customContent;
-
-                                        return (
-                                            <div
-                                                key={block.id}
-                                                className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xl">
-                                                        {getBlockIcon(block.block_type)}
-                                                    </span>
-                                                    <div>
-                                                        <p className="font-medium text-gray-900">
-                                                            {getBlockLabel(block.block_type)}
-                                                        </p>
-                                                        <p className="text-xs text-gray-500">
-                                                            {hasContent ? (
-                                                                <span className="text-green-600">✓ Заполнено</span>
-                                                            ) : (
-                                                                <span className="text-gray-400">По умолчанию</span>
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
-                                                    Редактировать
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                <ProjectBlockList
+                                    projectId={id}
+                                    templateBlocks={project.templates.template_blocks}
+                                    projectContent={project.project_content || []}
+                                />
                             ) : (
                                 <div className="text-center py-8">
                                     <p className="text-sm text-gray-500 mb-2">
