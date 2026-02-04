@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/server';
-import { cloudflareClient } from '@/lib/cloudflare';
+import { cloudflareClient, setupDnsCname, checkDnsStatus } from '@/lib/cloudflare';
 
 export type ActionState = {
     error?: string;
@@ -78,10 +78,16 @@ export async function deleteDomain(domainId: string): Promise<ActionState> {
 export async function verifyDnsStatus(domainId: string): Promise<ActionState> {
     const supabase = await createAdminClient();
 
-    // Get domain
+    // Get domain and its linked project
     const { data: domain, error: fetchError } = await supabase
         .from('domains')
-        .select('*')
+        .select(`
+            *,
+            project_domains (
+                project_id,
+                projects (slug, cf_project_id)
+            )
+        `)
         .eq('id', domainId)
         .single();
 
@@ -89,11 +95,23 @@ export async function verifyDnsStatus(domainId: string): Promise<ActionState> {
         return { error: 'Домен не найден' };
     }
 
-    // TODO: Implement actual DNS verification via Cloudflare API
-    // For now, we'll just mark it as active after first check
+    // Get expected CF Pages URL from linked project
+    const projectDomain = domain.project_domains?.[0] as { projects: { slug: string; cf_project_id: string | null } } | undefined;
+    const project = projectDomain?.projects;
+
+    if (!project) {
+        return { error: 'Домен не привязан к проекту' };
+    }
+
+    const cfPagesUrl = `${project.cf_project_id || `dl-${project.slug}`}.pages.dev`;
+
+    // Check actual DNS status via Cloudflare
+    const dnsStatus = await checkDnsStatus(domain.domain_name, cfPagesUrl);
+    const newStatus = dnsStatus.active ? 'active' : 'pending';
+
     const { error } = await supabase
         .from('domains')
-        .update({ dns_status: 'active' })
+        .update({ dns_status: newStatus })
         .eq('id', domainId);
 
     if (error) {
@@ -112,6 +130,23 @@ export async function linkDomainToProject(
 ): Promise<ActionState> {
     const supabase = await createAdminClient();
 
+    // Get domain and project info for DNS setup
+    const [domainResult, projectResult] = await Promise.all([
+        supabase.from('domains').select('domain_name').eq('id', domainId).single(),
+        supabase.from('projects').select('slug, cf_project_id').eq('id', projectId).single(),
+    ]);
+
+    if (domainResult.error || !domainResult.data) {
+        return { error: 'Домен не найден' };
+    }
+    if (projectResult.error || !projectResult.data) {
+        return { error: 'Проект не найден' };
+    }
+
+    const domainName = domainResult.data.domain_name;
+    const project = projectResult.data;
+    const cfPagesUrl = `${project.cf_project_id || `dl-${project.slug}`}.pages.dev`;
+
     // If setting as primary, first unset any existing primary domain for this project
     if (isPrimary) {
         await supabase
@@ -120,12 +155,14 @@ export async function linkDomainToProject(
             .eq('project_id', projectId);
     }
 
+    // Insert project_domain link
     const { error } = await supabase
         .from('project_domains')
         .insert({
             project_id: projectId,
             domain_id: domainId,
             is_primary: isPrimary,
+            cf_deployment_url: cfPagesUrl,
         });
 
     if (error) {
@@ -135,9 +172,32 @@ export async function linkDomainToProject(
         return { error: error.message };
     }
 
+    // Try to setup DNS CNAME automatically
+    const dnsResult = await setupDnsCname(domainName, cfPagesUrl);
+
+    // Update domain DNS status based on result
+    await supabase
+        .from('domains')
+        .update({
+            dns_status: dnsResult.success ? 'active' : 'pending',
+        })
+        .eq('id', domainId);
+
+    // Also add custom domain to Cloudflare Pages project
+    try {
+        const cfProjectName = project.cf_project_id || `dl-${project.slug}`;
+        await cloudflareClient.addCustomDomain(cfProjectName, domainName);
+    } catch {
+        // Non-critical: domain will still work if DNS is set up
+    }
+
     revalidatePath(`/projects/${projectId}`);
     revalidatePath('/domains');
-    return { success: true };
+
+    return {
+        success: true,
+        error: dnsResult.success ? undefined : `DNS настройка: ${dnsResult.error}`
+    };
 }
 
 // Unlink Domain from Project
