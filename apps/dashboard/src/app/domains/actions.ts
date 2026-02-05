@@ -256,6 +256,68 @@ export async function setPrimaryDomain(
     return { success: true };
 }
 
+// Toggle Domain Active Status
+export async function toggleDomainActive(
+    projectDomainId: string,
+    isActive: boolean
+): Promise<ActionState> {
+    const supabase = await createAdminClient();
+
+    // Get project_id for revalidation
+    const { data: projectDomain, error: fetchError } = await supabase
+        .from('project_domains')
+        .select('project_id, domains(domain_name)')
+        .eq('id', projectDomainId)
+        .single();
+
+    if (fetchError || !projectDomain) {
+        return { error: 'Домен не найден' };
+    }
+
+    const { error } = await supabase
+        .from('project_domains')
+        .update({ is_active: isActive })
+        .eq('id', projectDomainId);
+
+    if (error) {
+        return { error: error.message };
+    }
+
+    // If deactivating, remove from Cloudflare Pages
+    // If activating, will be added on next deploy
+    if (!isActive && projectDomain.domains) {
+        try {
+            const { data: project } = await supabase
+                .from('projects')
+                .select('cf_project_id, slug')
+                .eq('id', projectDomain.project_id)
+                .single();
+
+            if (project) {
+                const cfProjectName = project.cf_project_id || `dl-${project.slug}`;
+                const domains = projectDomain.domains as unknown as { domain_name: string } | null;
+                const domainName = domains?.domain_name;
+
+                if (domainName) {
+                    const { getCloudflareClient } = await import('@/lib/cloudflare/client');
+                    const cfClient = getCloudflareClient();
+
+                    try {
+                        await cfClient.removeCustomDomain(cfProjectName, domainName);
+                    } catch {
+                        // Non-critical: domain might not exist in CF Pages
+                    }
+                }
+            }
+        } catch {
+            // Non-critical
+        }
+    }
+
+    revalidatePath(`/projects/${projectDomain.project_id}`);
+    return { success: true };
+}
+
 // Add Custom Domain to Cloudflare Pages
 export async function addCustomDomainToCloudflare(
     projectId: string,

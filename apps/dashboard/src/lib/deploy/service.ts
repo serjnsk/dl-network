@@ -148,14 +148,15 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
       })
       .eq('id', projectId);
 
-    // 6. Add custom domains to Cloudflare Pages project
-    const projectDomains = (project as { project_domains?: Array<{ domains?: { domain_name: string } }> }).project_domains;
+    // 6. Add custom domains to Cloudflare Pages project (only active domains)
+    const projectDomains = (project as { project_domains?: Array<{ is_active?: boolean; domains?: { domain_name: string } }> }).project_domains;
     if (projectDomains && projectDomains.length > 0) {
       const { getCloudflareClient } = await import('@/lib/cloudflare/client');
       const cfClient = getCloudflareClient();
 
       for (const pd of projectDomains) {
-        if (pd.domains?.domain_name) {
+        // Only add active domains
+        if (pd.is_active !== false && pd.domains?.domain_name) {
           try {
             await cfClient.addCustomDomain(cfProjectName, pd.domains.domain_name);
             console.log(`Added custom domain: ${pd.domains.domain_name}`);

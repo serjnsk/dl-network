@@ -123,12 +123,12 @@ export default async function ProjectsPage() {
                                         <td>
                                             {project.status === 'published' && project.slug ? (
                                                 <a
-                                                    href={`https://${project.slug}.pages.dev`}
+                                                    href={`https://${project.cf_project_id || `dl-${project.slug}`}.pages.dev`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 hover:underline"
                                                 >
-                                                    {project.slug}.pages.dev
+                                                    {project.cf_project_id || `dl-${project.slug}`}.pages.dev
                                                     <ExternalLink className="h-3 w-3" />
                                                 </a>
                                             ) : (

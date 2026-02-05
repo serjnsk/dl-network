@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Plus, Trash2, Star, Loader2, X, Globe } from 'lucide-react';
+import { Plus, Trash2, Star, Loader2, X, Globe, Eye, EyeOff } from 'lucide-react';
 import {
     linkDomainToProject,
     unlinkDomainFromProject,
-    setPrimaryDomain
+    setPrimaryDomain,
+    toggleDomainActive
 } from '@/app/domains/actions';
 
 interface Domain {
@@ -17,6 +18,7 @@ interface Domain {
 interface ProjectDomain {
     id: string;
     is_primary: boolean;
+    is_active: boolean;
     domains: Domain;
 }
 
@@ -59,6 +61,15 @@ export function DomainManager({ projectId, projectDomains, availableDomains }: D
         });
     };
 
+    const handleToggleActive = (projectDomainId: string, currentActive: boolean) => {
+        startTransition(async () => {
+            const result = await toggleDomainActive(projectDomainId, !currentActive);
+            if (result.error) {
+                setError(result.error);
+            }
+        });
+    };
+
     // Filter out already linked domains
     const linkedDomainIds = projectDomains.map(pd => pd.domains.id);
     const unlinkedDomains = availableDomains.filter(d => !linkedDomainIds.includes(d.id));
@@ -93,8 +104,21 @@ export function DomainManager({ projectId, projectDomains, availableDomains }: D
                                         Основной
                                     </span>
                                 )}
+                                {!pd.is_active && (
+                                    <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-600">
+                                        Деактивирован
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => handleToggleActive(pd.id, pd.is_active)}
+                                    disabled={isPending}
+                                    className={`rounded p-1 ${pd.is_active ? 'text-green-500 hover:bg-orange-100 hover:text-orange-600' : 'text-orange-500 hover:bg-green-100 hover:text-green-600'} disabled:opacity-50`}
+                                    title={pd.is_active ? 'Деактивировать домен' : 'Активировать домен'}
+                                >
+                                    {pd.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                </button>
                                 {!pd.is_primary && (
                                     <button
                                         onClick={() => handleSetPrimary(pd.id)}
@@ -169,8 +193,8 @@ export function DomainManager({ projectId, projectDomains, availableDomains }: D
                                                     {domain.domain_name}
                                                 </p>
                                                 <p className={`text-xs ${domain.dns_status === 'active'
-                                                        ? 'text-green-600'
-                                                        : 'text-yellow-600'
+                                                    ? 'text-green-600'
+                                                    : 'text-yellow-600'
                                                     }`}>
                                                     {domain.dns_status === 'active' ? 'DNS активен' : 'Ожидание DNS'}
                                                 </p>

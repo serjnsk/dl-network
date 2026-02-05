@@ -61,6 +61,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       project_domains (
         id,
         is_primary,
+        is_active,
         canonical_domain,
         tracking_config,
         cf_deployment_url,
