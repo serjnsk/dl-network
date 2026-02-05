@@ -83,10 +83,27 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
       throw new Error('CLOUDFLARE_ACCOUNT_ID и CLOUDFLARE_API_TOKEN обязательны');
     }
 
-    // Build wrangler command
-    const wranglerCmd = `npx wrangler pages deploy "${tempDir}" --project-name="${cfProjectName}" --branch=main`;
+    // Build wrangler command with --commit-dirty to allow auto-creation
+    const wranglerCmd = `npx wrangler pages project create "${cfProjectName}" --production-branch=main 2>nul || echo "Project exists"`;
 
-    const { stdout, stderr } = await execAsync(wranglerCmd, {
+    // First, try to create the project (will fail silently if exists)
+    try {
+      await execAsync(wranglerCmd, {
+        env: {
+          ...process.env,
+          CLOUDFLARE_ACCOUNT_ID: accountId,
+          CLOUDFLARE_API_TOKEN: apiToken,
+        },
+        timeout: 30000,
+      });
+    } catch {
+      // Ignore errors - project might already exist
+    }
+
+    // Now deploy
+    const deployCmd = `npx wrangler pages deploy "${tempDir}" --project-name="${cfProjectName}" --branch=main --commit-dirty`;
+
+    const { stdout, stderr } = await execAsync(deployCmd, {
       env: {
         ...process.env,
         CLOUDFLARE_ACCOUNT_ID: accountId,
