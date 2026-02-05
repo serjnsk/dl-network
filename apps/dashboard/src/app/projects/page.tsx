@@ -79,6 +79,7 @@ export default async function ProjectsPage() {
                                 <th>Название</th>
                                 <th>Статус</th>
                                 <th>Шаблон</th>
+                                <th>Тестовый домен</th>
                                 <th>Домен</th>
                                 <th>Обновлён</th>
                                 <th className="w-12"></th>
@@ -116,6 +117,23 @@ export default async function ProjectsPage() {
                                         {/* Template */}
                                         <td className="text-sm text-gray-600">
                                             {project.templates?.name || '—'}
+                                        </td>
+
+                                        {/* Test Domain (Cloudflare Pages) */}
+                                        <td>
+                                            {project.status === 'published' && project.slug ? (
+                                                <a
+                                                    href={`https://${project.slug}.pages.dev`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 hover:underline"
+                                                >
+                                                    {project.slug}.pages.dev
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </a>
+                                            ) : (
+                                                <span className="text-sm text-gray-400">—</span>
+                                            )}
                                         </td>
 
                                         {/* Domain */}
@@ -169,7 +187,8 @@ export default async function ProjectsPage() {
                         </tbody>
                     </table>
                 </div>
-            )}
-        </DashboardLayout>
+            )
+            }
+        </DashboardLayout >
     );
 }
