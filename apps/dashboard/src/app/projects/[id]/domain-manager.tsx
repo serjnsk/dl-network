@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Plus, Trash2, Star, Loader2, X, Globe, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Star, Loader2, X, Globe, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import {
     linkDomainToProject,
     unlinkDomainFromProject,
     setPrimaryDomain,
-    toggleDomainActive
+    toggleDomainActive,
+    syncDomainsFromCloudflare
 } from '@/app/domains/actions';
 
 interface Domain {
@@ -32,6 +33,14 @@ export function DomainManager({ projectId, projectDomains, availableDomains }: D
     const [isPending, startTransition] = useTransition();
     const [showAddModal, setShowAddModal] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        await syncDomainsFromCloudflare();
+        setIsSyncing(false);
+        window.location.reload(); // Reload to get fresh domain data
+    };
 
     const handleLink = (domainId: string) => {
         setError(null);
@@ -210,13 +219,26 @@ export function DomainManager({ projectId, projectDomains, availableDomains }: D
                             </ul>
                         )}
 
-                        <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                        <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
                             <a
                                 href="/domains/new"
                                 className="text-sm text-blue-600 hover:underline"
                             >
                                 + Добавить новый домен
                             </a>
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                                title="Обновить статус DNS из Cloudflare"
+                            >
+                                {isSyncing ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                )}
+                                Обновить DNS
+                            </button>
                         </div>
                     </div>
                 </div>
