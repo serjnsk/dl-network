@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { DeleteButton, PublishButton } from './buttons';
 import { DomainManager } from './domain-manager';
-import { ProjectBlockList } from './project-block-list';
+import { ProjectPagesManager } from './project-pages-manager';
+import { GlobalCodeEditor } from './global-code-editor';
 
 // Block type helpers
 const BLOCK_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -50,16 +51,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         .select(
             `
       *,
-      templates (
-        id, 
-        name, 
+      project_pages (
+        id,
         slug,
-        template_blocks (
-          id,
-          block_type,
-          block_order,
-          default_content
-        )
+        title,
+        html_content,
+        page_order
       ),
       project_domains (
         id,
@@ -68,13 +65,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         tracking_config,
         cf_deployment_url,
         domains (id, domain_name, dns_status)
-      ),
-      project_content (
-        id,
-        page_slug,
-        block_type,
-        block_order,
-        content
       )
     `
         )
@@ -85,12 +75,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         notFound();
     }
 
-    // Sort template blocks by order
-    if (project.templates?.template_blocks) {
-        project.templates.template_blocks.sort(
-            (a: { block_order: number }, b: { block_order: number }) => a.block_order - b.block_order
-        );
-    }
+
 
     // Load all domains for domain picker
     const { data: allDomains } = await supabase
@@ -215,37 +200,20 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                         </dl>
                     </div>
 
-                    {/* Content Blocks */}
+                    {/* Static HTML Pages */}
                     <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
-                        <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-                            Контент
-                        </h2>
-                        {project.templates ? (
-                            project.templates.template_blocks?.length > 0 ? (
-                                <ProjectBlockList
-                                    projectId={id}
-                                    templateBlocks={project.templates.template_blocks}
-                                    projectContent={project.project_content || []}
-                                />
-                            ) : (
-                                <div className="text-center py-8">
-                                    <p className="text-sm text-gray-500 mb-2">
-                                        Шаблон не содержит блоков
-                                    </p>
-                                    <Link
-                                        href={`/templates/${project.templates.id}`}
-                                        className="text-sm text-blue-600 hover:underline"
-                                    >
-                                        Добавить блоки в шаблон
-                                    </Link>
-                                </div>
-                            )
-                        ) : (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Контент пока не добавлен. Выберите шаблон для начала.
-                            </p>
-                        )}
+                        <ProjectPagesManager
+                            projectId={id}
+                            pages={project.project_pages || []}
+                        />
                     </div>
+
+                    {/* Global Code */}
+                    <GlobalCodeEditor
+                        projectId={id}
+                        initialHeadCode={project.global_head_code || ''}
+                        initialBodyCode={project.global_body_code || ''}
+                    />
                 </div>
 
                 {/* Sidebar */}

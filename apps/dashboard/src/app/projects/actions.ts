@@ -206,3 +206,161 @@ export async function getBlockContent(
     return { content: (data?.content as Record<string, unknown>) || null };
 }
 
+// ============================================
+// PROJECT PAGES (Static HTML)
+// ============================================
+
+// Create Project Page
+export async function createProjectPage(
+    projectId: string,
+    title: string,
+    slug: string,
+    htmlContent: string
+): Promise<ActionState & { pageId?: string }> {
+    const supabase = await createAdminClient();
+
+    // Validate slug
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+        return { error: 'Slug может содержать только строчные буквы, цифры и дефисы' };
+    }
+
+    // Get next order
+    const { data: maxOrder } = await supabase
+        .from('project_pages')
+        .select('page_order')
+        .eq('project_id', projectId)
+        .order('page_order', { ascending: false })
+        .limit(1)
+        .single();
+
+    const nextOrder = (maxOrder?.page_order ?? -1) + 1;
+
+    const { data, error } = await supabase
+        .from('project_pages')
+        .insert({
+            project_id: projectId,
+            title,
+            slug,
+            html_content: htmlContent,
+            page_order: nextOrder,
+        })
+        .select()
+        .single();
+
+    if (error) {
+        if (error.code === '23505') {
+            return { error: 'Страница с таким slug уже существует' };
+        }
+        return { error: error.message };
+    }
+
+    revalidatePath(`/projects/${projectId}`);
+    return { success: true, pageId: data.id };
+}
+
+// Update Project Page
+export async function updateProjectPage(
+    pageId: string,
+    title: string,
+    slug: string,
+    htmlContent: string
+): Promise<ActionState> {
+    const supabase = await createAdminClient();
+
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+        return { error: 'Slug может содержать только строчные буквы, цифры и дефисы' };
+    }
+
+    const { data: page, error: fetchError } = await supabase
+        .from('project_pages')
+        .select('project_id')
+        .eq('id', pageId)
+        .single();
+
+    if (fetchError) {
+        return { error: fetchError.message };
+    }
+
+    const { error } = await supabase
+        .from('project_pages')
+        .update({ title, slug, html_content: htmlContent })
+        .eq('id', pageId);
+
+    if (error) {
+        if (error.code === '23505') {
+            return { error: 'Страница с таким slug уже существует' };
+        }
+        return { error: error.message };
+    }
+
+    revalidatePath(`/projects/${page.project_id}`);
+    return { success: true };
+}
+
+// Delete Project Page
+export async function deleteProjectPage(pageId: string): Promise<ActionState> {
+    const supabase = await createAdminClient();
+
+    const { data: page, error: fetchError } = await supabase
+        .from('project_pages')
+        .select('project_id')
+        .eq('id', pageId)
+        .single();
+
+    if (fetchError) {
+        return { error: fetchError.message };
+    }
+
+    const { error } = await supabase
+        .from('project_pages')
+        .delete()
+        .eq('id', pageId);
+
+    if (error) {
+        return { error: error.message };
+    }
+
+    revalidatePath(`/projects/${page.project_id}`);
+    return { success: true };
+}
+
+// Update Global Code
+export async function updateGlobalCode(
+    projectId: string,
+    globalHeadCode: string,
+    globalBodyCode: string
+): Promise<ActionState> {
+    const supabase = await createAdminClient();
+
+    const { error } = await supabase
+        .from('projects')
+        .update({
+            global_head_code: globalHeadCode,
+            global_body_code: globalBodyCode,
+        })
+        .eq('id', projectId);
+
+    if (error) {
+        return { error: error.message };
+    }
+
+    revalidatePath(`/projects/${projectId}`);
+    return { success: true };
+}
+
+// Get Project Pages
+export async function getProjectPages(projectId: string) {
+    const supabase = await createAdminClient();
+
+    const { data, error } = await supabase
+        .from('project_pages')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('page_order', { ascending: true });
+
+    if (error) {
+        return { pages: [], error: error.message };
+    }
+
+    return { pages: data || [] };
+}

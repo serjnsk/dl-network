@@ -13,24 +13,51 @@ export interface DeployResult {
   projectUrl?: string;
 }
 
+interface ProjectPage {
+  id: string;
+  slug: string;
+  title: string;
+  html_content: string;
+  page_order: number;
+}
+
+interface ProjectWithPages {
+  id: string;
+  name: string;
+  slug: string;
+  global_head_code?: string | null;
+  global_body_code?: string | null;
+  project_pages?: ProjectPage[];
+}
+
 export async function deployProject(projectId: string): Promise<DeployResult> {
   const supabase = await createAdminClient();
   let tempDir: string | null = null;
 
   try {
-    // 1. Fetch project from database
+    // 1. Fetch project with pages from database
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select(`
         *,
-        templates (id, name, slug),
-        project_content (page_slug, block_type, block_order, content)
+        project_pages (
+          id,
+          slug,
+          title,
+          html_content,
+          page_order
+        )
       `)
       .eq('id', projectId)
       .single();
 
     if (projectError || !project) {
       return { success: false, error: 'Проект не найден' };
+    }
+
+    // Check if project has pages
+    if (!project.project_pages || project.project_pages.length === 0) {
+      return { success: false, error: 'Добавьте хотя бы одну страницу перед публикацией' };
     }
 
     // 2. Update status to building
@@ -45,10 +72,8 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
     tempDir = join(tmpdir(), `dl-deploy-${projectId}-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
 
-    const files = generateStaticFiles(project);
-    for (const [filename, content] of Object.entries(files)) {
-      await writeFile(join(tempDir, filename), content, 'utf-8');
-    }
+    // Generate files for each page
+    await generateStaticFiles(tempDir, project as ProjectWithPages);
 
     // 4. Deploy using Wrangler CLI
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -129,234 +154,82 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
   }
 }
 
-interface ProjectWithContent {
-  id: string;
-  name: string;
-  slug: string;
-  templates?: { name: string; slug: string } | null;
-  project_content?: Array<{
-    page_slug: string;
-    block_type: string;
-    block_order: number;
-    content: Record<string, unknown>;
-  }>;
-}
+/**
+ * Generate static files for all pages
+ * Structure:
+ * - index.html (main page, slug = 'index')
+ * - about/index.html (other pages)
+ * - robots.txt
+ */
+async function generateStaticFiles(
+  tempDir: string,
+  project: ProjectWithPages
+): Promise<void> {
+  const pages = project.project_pages || [];
+  const globalHeadCode = project.global_head_code || '';
+  const globalBodyCode = project.global_body_code || '';
 
-function generateStaticFiles(
-  project: ProjectWithContent
-): Record<string, string> {
-  const files: Record<string, string> = {};
+  // Sort pages by order
+  pages.sort((a, b) => a.page_order - b.page_order);
 
-  // Generate index.html
-  files['index.html'] = generateIndexHtml(project);
+  for (const page of pages) {
+    const processedHtml = injectGlobalCode(
+      page.html_content,
+      globalHeadCode,
+      globalBodyCode
+    );
+
+    if (page.slug === 'index') {
+      // Main page goes to root
+      await writeFile(join(tempDir, 'index.html'), processedHtml, 'utf-8');
+    } else {
+      // Other pages go to slug/index.html for clean URLs
+      const pageDir = join(tempDir, page.slug);
+      await mkdir(pageDir, { recursive: true });
+      await writeFile(join(pageDir, 'index.html'), processedHtml, 'utf-8');
+    }
+  }
 
   // Generate robots.txt
-  files['robots.txt'] = `User-agent: *
-Allow: /`;
-
-  // Generate simple CSS
-  files['styles.css'] = generateCss();
-
-  return files;
+  await writeFile(
+    join(tempDir, 'robots.txt'),
+    `User-agent: *
+Allow: /`,
+    'utf-8'
+  );
 }
 
-function generateIndexHtml(project: ProjectWithContent): string {
-  const content = project.project_content || [];
-  const sortedContent = [...content].sort((a, b) => a.block_order - b.block_order);
+/**
+ * Inject global code into HTML
+ * - head code before </head>
+ * - body code before </body>
+ */
+function injectGlobalCode(
+  html: string,
+  headCode: string,
+  bodyCode: string
+): string {
+  let result = html;
 
-  let blocksHtml = '';
-
-  for (const block of sortedContent) {
-    blocksHtml += renderBlock(block);
+  // Inject head code
+  if (headCode) {
+    if (result.includes('</head>')) {
+      result = result.replace('</head>', `${headCode}\n</head>`);
+    } else if (result.includes('<body>')) {
+      // If no </head>, inject before <body>
+      result = result.replace('<body>', `${headCode}\n<body>`);
+    }
   }
 
-  // If no content, show placeholder
-  if (!blocksHtml) {
-    blocksHtml = `
-      <section class="hero">
-        <h1>${project.name}</h1>
-        <p>Добро пожаловать на наш сайт</p>
-      </section>
-    `;
+  // Inject body code
+  if (bodyCode) {
+    if (result.includes('</body>')) {
+      result = result.replace('</body>', `${bodyCode}\n</body>`);
+    } else {
+      // If no </body>, append at the end
+      result = `${result}\n${bodyCode}`;
+    }
   }
 
-  return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${project.name}</title>
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  ${blocksHtml}
-</body>
-</html>`;
-}
-
-function renderBlock(block: {
-  block_type: string;
-  content: Record<string, unknown>;
-}): string {
-  const { block_type, content } = block;
-
-  switch (block_type) {
-    case 'hero':
-      return `
-        <section class="hero">
-          <h1>${content.title || 'Заголовок'}</h1>
-          <p>${content.subtitle || ''}</p>
-          ${content.button_text ? `<a href="${content.button_url || '#'}" class="btn">${content.button_text}</a>` : ''}
-        </section>
-      `;
-
-    case 'features':
-      const items = (content.items as Array<{ title: string; description: string; icon: string }>) || [];
-      return `
-        <section class="features">
-          <h2>${content.title || 'Особенности'}</h2>
-          <div class="features-grid">
-            ${items.map(
-        (item) => `
-                <div class="feature-card">
-                  <div class="feature-icon">${item.icon || '⭐'}</div>
-                  <h3>${item.title || ''}</h3>
-                  <p>${item.description || ''}</p>
-                </div>
-              `
-      ).join('')}
-          </div>
-        </section>
-      `;
-
-    case 'cta':
-      return `
-        <section class="cta">
-          <h2>${content.title || ''}</h2>
-          <p>${content.description || ''}</p>
-          ${content.button_text ? `<a href="${content.button_url || '#'}" class="btn btn-primary">${content.button_text}</a>` : ''}
-        </section>
-      `;
-
-    case 'footer':
-      return `
-        <footer class="footer">
-          <p>${content.copyright || `© ${new Date().getFullYear()}`}</p>
-        </footer>
-      `;
-
-    default:
-      return '';
-  }
-}
-
-function generateCss(): string {
-  return `
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-  color: #333;
-}
-
-.hero {
-  min-height: 60vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 4rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.hero h1 {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.hero p {
-  font-size: 1.25rem;
-  opacity: 0.9;
-  max-width: 600px;
-}
-
-.btn {
-  display: inline-block;
-  margin-top: 2rem;
-  padding: 1rem 2rem;
-  background: white;
-  color: #667eea;
-  text-decoration: none;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: transform 0.2s;
-}
-
-.btn:hover {
-  transform: translateY(-2px);
-}
-
-.btn-primary {
-  background: #667eea;
-  color: white;
-}
-
-.features {
-  padding: 4rem 2rem;
-  text-align: center;
-}
-
-.features h2 {
-  font-size: 2rem;
-  margin-bottom: 3rem;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.feature-card {
-  padding: 2rem;
-  border-radius: 12px;
-  background: #f8f9fa;
-}
-
-.feature-icon {
-  font-size: 2.5rem;
-  margin-bottom: 1rem;
-}
-
-.feature-card h3 {
-  margin-bottom: 0.5rem;
-}
-
-.cta {
-  padding: 4rem 2rem;
-  text-align: center;
-  background: #f8f9fa;
-}
-
-.cta h2 {
-  font-size: 2rem;
-  margin-bottom: 1rem;
-}
-
-.footer {
-  padding: 2rem;
-  text-align: center;
-  background: #1a1a1a;
-  color: #888;
-}
-`;
+  return result;
 }
