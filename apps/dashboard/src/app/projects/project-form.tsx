@@ -18,17 +18,7 @@ function SubmitButton() {
     );
 }
 
-interface Template {
-    id: string;
-    name: string;
-    slug: string;
-}
-
-interface ProjectFormProps {
-    templates: Template[];
-}
-
-export function ProjectForm({ templates }: ProjectFormProps) {
+export function ProjectForm() {
     const [state, formAction] = useActionState<ActionState, FormData>(
         createProject,
         {}
@@ -98,28 +88,6 @@ export function ProjectForm({ templates }: ProjectFormProps) {
                 <p className="mt-1 text-xs text-gray-500">
                     Только строчные буквы, цифры и дефисы
                 </p>
-            </div>
-
-            {/* Template Selection */}
-            <div>
-                <label
-                    htmlFor="template_id"
-                    className="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
-                >
-                    Шаблон
-                </label>
-                <select
-                    id="template_id"
-                    name="template_id"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                >
-                    <option value="">Без шаблона</option>
-                    {templates.map((template) => (
-                        <option key={template.id} value={template.id}>
-                            {template.name}
-                        </option>
-                    ))}
-                </select>
             </div>
 
             {/* Submit */}

@@ -5,37 +5,16 @@ import Link from 'next/link';
 import {
     ArrowLeft,
     ExternalLink,
-    Settings,
     Globe,
     Trash2,
     Rocket,
     Pencil,
+    Settings,
 } from 'lucide-react';
 import { DeleteButton, PublishButton } from './buttons';
 import { DomainManager } from './domain-manager';
 import { ProjectPagesManager } from './project-pages-manager';
 import { GlobalCodeEditor } from './global-code-editor';
-
-// Block type helpers
-const BLOCK_CONFIG: Record<string, { label: string; icon: string }> = {
-    hero: { label: 'Hero секция', icon: '🚀' },
-    features: { label: 'Преимущества', icon: '⭐' },
-    cta: { label: 'Призыв к действию', icon: '📢' },
-    footer: { label: 'Подвал', icon: '📋' },
-    gallery: { label: 'Галерея', icon: '🖼️' },
-    testimonials: { label: 'Отзывы', icon: '💬' },
-    pricing: { label: 'Цены', icon: '💰' },
-    faq: { label: 'FAQ', icon: '❓' },
-    contact: { label: 'Контакты', icon: '📧' },
-};
-
-function getBlockLabel(type: string): string {
-    return BLOCK_CONFIG[type]?.label || type;
-}
-
-function getBlockIcon(type: string): string {
-    return BLOCK_CONFIG[type]?.icon || '📦';
-}
 
 interface ProjectPageProps {
     params: Promise<{ id: string }>;
@@ -158,14 +137,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                             Настройки
                         </h2>
                         <dl className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                    Шаблон
-                                </dt>
-                                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
-                                    {project.templates?.name || 'Не выбран'}
-                                </dd>
-                            </div>
                             <div>
                                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                                     CF Project ID

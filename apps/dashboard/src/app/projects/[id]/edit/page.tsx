@@ -16,20 +16,13 @@ export default async function EditProjectPage({ params }: EditProjectPageProps) 
     // Fetch project
     const { data: project, error } = await supabase
         .from('projects')
-        .select('id, name, slug, template_id')
+        .select('id, name, slug')
         .eq('id', id)
         .single();
 
     if (error || !project) {
         notFound();
     }
-
-    // Fetch available templates
-    const { data: templates } = await supabase
-        .from('templates')
-        .select('id, name, slug')
-        .eq('is_active', true)
-        .order('name');
 
     return (
         <DashboardLayout>
@@ -52,7 +45,7 @@ export default async function EditProjectPage({ params }: EditProjectPageProps) 
 
             {/* Form Card */}
             <div className="mx-auto max-w-2xl rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
-                <EditForm project={project} templates={templates || []} />
+                <EditForm project={project} />
             </div>
         </DashboardLayout>
     );

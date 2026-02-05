@@ -1,19 +1,9 @@
 import { DashboardLayout } from '@/components/layout';
-import { createAdminClient } from '@/lib/supabase/server';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { ProjectForm } from '../project-form';
 
 export default async function NewProjectPage() {
-    const supabase = await createAdminClient();
-
-    // Fetch available templates
-    const { data: templates } = await supabase
-        .from('templates')
-        .select('id, name, slug')
-        .eq('is_active', true)
-        .order('name');
-
     return (
         <DashboardLayout>
             {/* Header */}
@@ -35,7 +25,7 @@ export default async function NewProjectPage() {
 
             {/* Form Card */}
             <div className="mx-auto max-w-2xl rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
-                <ProjectForm templates={templates || []} />
+                <ProjectForm />
             </div>
         </DashboardLayout>
     );

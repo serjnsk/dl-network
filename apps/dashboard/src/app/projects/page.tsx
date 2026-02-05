@@ -10,7 +10,6 @@ export default async function ProjectsPage() {
         .from('projects')
         .select(`
       *,
-      templates (name),
       project_domains (
         domain_id,
         is_primary,
@@ -78,7 +77,6 @@ export default async function ProjectsPage() {
                             <tr>
                                 <th>Название</th>
                                 <th>Статус</th>
-                                <th>Шаблон</th>
                                 <th>Тестовый домен</th>
                                 <th>Домен</th>
                                 <th>Обновлён</th>
@@ -114,10 +112,7 @@ export default async function ProjectsPage() {
                                             </span>
                                         </td>
 
-                                        {/* Template */}
-                                        <td className="text-sm text-gray-600">
-                                            {project.templates?.name || '—'}
-                                        </td>
+
 
                                         {/* Test Domain (Cloudflare Pages) */}
                                         <td>

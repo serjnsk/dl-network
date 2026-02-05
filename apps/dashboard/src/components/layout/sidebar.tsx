@@ -3,19 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    LayoutDashboard,
     FolderKanban,
-    Palette,
-    Blocks,
     Globe,
     Settings,
 } from 'lucide-react';
 
 const navigation = [
     { name: 'Проекты', href: '/projects', icon: FolderKanban },
-    { name: 'Шаблоны', href: '/templates', icon: LayoutDashboard },
-    { name: 'Блоки', href: '/blocks', icon: Blocks },
-    { name: 'Дизайн', href: '/designs', icon: Palette },
     { name: 'Домены', href: '/domains', icon: Globe },
 ];
 
