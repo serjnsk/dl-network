@@ -35,7 +35,7 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
   let tempDir: string | null = null;
 
   try {
-    // 1. Fetch project with pages from database
+    // 1. Fetch project with pages and domains from database
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select(`
@@ -46,6 +46,13 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
           title,
           html_content,
           page_order
+        ),
+        project_domains (
+          id,
+          domains (
+            id,
+            domain_name
+          )
         )
       `)
       .eq('id', projectId)
@@ -140,6 +147,25 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
         cf_project_id: cfProjectName,
       })
       .eq('id', projectId);
+
+    // 6. Add custom domains to Cloudflare Pages project
+    const projectDomains = (project as { project_domains?: Array<{ domains?: { domain_name: string } }> }).project_domains;
+    if (projectDomains && projectDomains.length > 0) {
+      const { getCloudflareClient } = await import('@/lib/cloudflare/client');
+      const cfClient = getCloudflareClient();
+
+      for (const pd of projectDomains) {
+        if (pd.domains?.domain_name) {
+          try {
+            await cfClient.addCustomDomain(cfProjectName, pd.domains.domain_name);
+            console.log(`Added custom domain: ${pd.domains.domain_name}`);
+          } catch (domainError) {
+            // Non-critical: log but don't fail deployment
+            console.warn(`Failed to add domain ${pd.domains.domain_name}:`, domainError);
+          }
+        }
+      }
+    }
 
     return {
       success: true,
