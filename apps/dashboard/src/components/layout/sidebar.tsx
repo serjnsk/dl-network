@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation';
 import {
     FolderKanban,
     Globe,
-    Settings,
+    LogOut,
 } from 'lucide-react';
+import { logout } from '@/lib/auth';
 
 const navigation = [
     { name: 'Проекты', href: '/projects', icon: FolderKanban },
@@ -50,16 +51,19 @@ export function Sidebar() {
                 })}
             </nav>
 
-            {/* Settings at bottom */}
+            {/* Logout at bottom */}
             <div className="absolute bottom-0 left-0 right-0 border-t border-gray-200 p-4">
-                <Link
-                    href="/settings"
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
-                >
-                    <Settings className="h-5 w-5" />
-                    Настройки
-                </Link>
+                <form action={logout}>
+                    <button
+                        type="submit"
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                        <LogOut className="h-5 w-5" />
+                        Выйти
+                    </button>
+                </form>
             </div>
         </aside>
     );
 }
+
