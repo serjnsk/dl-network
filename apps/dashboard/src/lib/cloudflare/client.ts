@@ -112,17 +112,76 @@ class CloudflareClient {
         projectName: string,
         files: Record<string, string> // path -> content
     ): Promise<CloudflareDeployment> {
-        // For direct upload, we need to use FormData
-        const manifest: Record<string, string> = {};
-        const formData = new FormData();
+        // Step 1: Get upload token
+        const tokenResponse = await this.request<{ jwt: string }>(
+            `/accounts/${this.accountId}/pages/projects/${projectName}/upload-token`
+        );
+        const uploadToken = tokenResponse.result.jwt;
 
-        // Create file blobs and manifest
+        // Step 2: Prepare files with hashes
+        const manifest: Record<string, string> = {};
+        const assetsToUpload: Array<{
+            key: string;
+            value: string;
+            metadata: { contentType: string };
+            base64: boolean;
+        }> = [];
+
         for (const [path, content] of Object.entries(files)) {
             const hash = await this.hashContent(content);
-            manifest[`/${path}`] = hash;
-            formData.append(hash, new Blob([content]), path);
+            const fullPath = path.startsWith('/') ? path : `/${path}`;
+            manifest[fullPath] = hash;
+
+            // Determine content type
+            let contentType = 'text/plain';
+            if (path.endsWith('.html')) contentType = 'text/html';
+            else if (path.endsWith('.css')) contentType = 'text/css';
+            else if (path.endsWith('.js')) contentType = 'application/javascript';
+            else if (path.endsWith('.json')) contentType = 'application/json';
+            else if (path.endsWith('.txt')) contentType = 'text/plain';
+
+            assetsToUpload.push({
+                key: hash,
+                value: Buffer.from(content).toString('base64'),
+                metadata: { contentType },
+                base64: true,
+            });
         }
 
+        // Step 3: Upload assets
+        const uploadResponse = await fetch(
+            `${CLOUDFLARE_API_URL}/pages/assets/upload`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${uploadToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(assetsToUpload),
+            }
+        );
+
+        if (!uploadResponse.ok) {
+            const error = await uploadResponse.text();
+            throw new Error(`Asset upload failed: ${error}`);
+        }
+
+        // Step 4: Upsert hashes
+        const hashes = assetsToUpload.map(a => a.key);
+        await fetch(
+            `${CLOUDFLARE_API_URL}/pages/assets/upsert-hashes`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${uploadToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ hashes }),
+            }
+        );
+
+        // Step 5: Create deployment with manifest
+        const formData = new FormData();
         formData.append('manifest', JSON.stringify(manifest));
 
         const response = await fetch(
@@ -279,7 +338,8 @@ class CloudflareClient {
         const data = encoder.encode(content);
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+        // Return first 32 chars (Cloudflare expects ~32 char hash)
+        return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
     }
 }
 
