@@ -4,10 +4,8 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import {
     ArrowLeft,
-    ExternalLink,
     Globe,
     Trash2,
-    Rocket,
     Pencil,
     Settings,
 } from 'lucide-react';
@@ -77,10 +75,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         failed: 'Ошибка',
     };
 
-    const primaryDomain = project.project_domains?.find(
-        (pd: { is_primary: boolean }) => pd.is_primary
-    );
-    const domainName = primaryDomain?.domains?.domain_name;
 
     return (
         <DashboardLayout>

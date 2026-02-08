@@ -1,6 +1,6 @@
 import { DashboardLayout } from '@/components/layout';
 import { createAdminClient } from '@/lib/supabase/server';
-import { Plus, ExternalLink, Eye, Pencil, MoreHorizontal } from 'lucide-react';
+import { Plus, ExternalLink, Eye, Pencil } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function ProjectsPage() {

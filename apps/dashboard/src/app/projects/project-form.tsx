@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
+import Link from 'next/link';
 import { createProject, type ActionState } from './actions';
 
 function SubmitButton() {
@@ -92,12 +93,12 @@ export function ProjectForm() {
 
             {/* Submit */}
             <div className="flex justify-end gap-3 border-t border-gray-200 pt-6 dark:border-gray-800">
-                <a
+                <Link
                     href="/projects"
                     className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                 >
                     Отмена
-                </a>
+                </Link>
                 <SubmitButton />
             </div>
         </form>

@@ -1,0 +1,20 @@
+
+> dl-network@ dev C:\Users\1\.gemini\antigravity\scratch\dl-network
+> pnpm --filter dashboard dev
+
+
+> dashboard@0.1.0 dev C:\Users\1\.gemini\antigravity\scratch\dl-network\apps\dashboard
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.218.126.37:3000
+
+✓ Starting...
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+✓ Ready in 3.4s
+○ Compiling /login ...
+^CC:\Users\1\.gemini\antigravity\scratch\dl-network\apps\dashboard:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  dashboard@0.1.0 dev: `next dev`
+Exit status 3221225786
+ ELIFECYCLE  Command failed with exit code 3221225786.

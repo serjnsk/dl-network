@@ -23,7 +23,7 @@ export function DeleteButton({ projectId, projectName }: DeleteButtonProps) {
         return (
             <div className="space-y-3">
                 <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                    Вы уверены, что хотите удалить "{projectName}"?
+                    Вы уверены, что хотите удалить &quot;{projectName}&quot;?
                 </p>
                 <div className="flex gap-2">
                     <button
