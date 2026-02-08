@@ -1,11 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFile, mkdir, rm } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-
-const execAsync = promisify(exec);
+import { getCloudflareClient } from '@/lib/cloudflare/client';
 
 export interface DeployResult {
   success: boolean;
@@ -32,7 +26,6 @@ interface ProjectWithPages {
 
 export async function deployProject(projectId: string): Promise<DeployResult> {
   const supabase = await createAdminClient();
-  let tempDir: string | null = null;
 
   try {
     // 1. Fetch project with pages and domains from database
@@ -49,6 +42,7 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
         ),
         project_domains (
           id,
+          is_active,
           domains (
             id,
             domain_name
@@ -74,72 +68,29 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
       .eq('id', projectId);
 
     const cfProjectName = `dl-${project.slug}`;
+    const cfClient = getCloudflareClient();
 
-    // 3. Generate static files to temp directory
-    tempDir = join(tmpdir(), `dl-deploy-${projectId}-${Date.now()}`);
-    await mkdir(tempDir, { recursive: true });
+    // 3. Generate files in memory (no filesystem needed)
+    const files = generateStaticFiles(project as ProjectWithPages);
 
-    // Generate files for each page
-    await generateStaticFiles(tempDir, project as ProjectWithPages);
-
-    // 4. Deploy using Wrangler CLI
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-
-    if (!accountId || !apiToken) {
-      throw new Error('CLOUDFLARE_ACCOUNT_ID и CLOUDFLARE_API_TOKEN обязательны');
-    }
-
-    // Build wrangler command with --commit-dirty to allow auto-creation
-    const wranglerCmd = `npx wrangler pages project create "${cfProjectName}" --production-branch=main 2>nul || echo "Project exists"`;
-
-    // First, try to create the project (will fail silently if exists)
+    // 4. Ensure project exists, create if not
     try {
-      await execAsync(wranglerCmd, {
-        env: {
-          ...process.env,
-          CLOUDFLARE_ACCOUNT_ID: accountId,
-          CLOUDFLARE_API_TOKEN: apiToken,
-        },
-        timeout: 30000,
-      });
+      await cfClient.getProject(cfProjectName);
     } catch {
-      // Ignore errors - project might already exist
+      // Project doesn't exist, create it
+      await cfClient.createProject({
+        name: cfProjectName,
+        production_branch: 'main',
+      });
     }
 
-    // Now deploy
-    const deployCmd = `npx wrangler pages deploy "${tempDir}" --project-name="${cfProjectName}" --branch=main --commit-dirty`;
+    // 5. Deploy using Cloudflare API (direct upload)
+    const deployment = await cfClient.createDeployment(cfProjectName, files);
 
-    const { stdout, stderr } = await execAsync(deployCmd, {
-      env: {
-        ...process.env,
-        CLOUDFLARE_ACCOUNT_ID: accountId,
-        CLOUDFLARE_API_TOKEN: apiToken,
-      },
-      timeout: 120000, // 2 minutes timeout
-    });
+    // Get deployment URL
+    const deploymentUrl = deployment.url || `https://${cfProjectName}.pages.dev`;
 
-    // Parse deployment URL from output
-    let deploymentUrl = '';
-    const urlMatch = stdout.match(/https:\/\/[^\s]+\.pages\.dev/);
-    if (urlMatch) {
-      deploymentUrl = urlMatch[0];
-    }
-
-    // Also check for project URL in stderr (wrangler sometimes outputs there)
-    if (!deploymentUrl && stderr) {
-      const stderrUrlMatch = stderr.match(/https:\/\/[^\s]+\.pages\.dev/);
-      if (stderrUrlMatch) {
-        deploymentUrl = stderrUrlMatch[0];
-      }
-    }
-
-    // Default URL if not found in output
-    if (!deploymentUrl) {
-      deploymentUrl = `https://${cfProjectName}.pages.dev`;
-    }
-
-    // 5. Update project status and deployment URL
+    // 6. Update project status and deployment URL
     await supabase
       .from('projects')
       .update({
@@ -148,21 +99,19 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
       })
       .eq('id', projectId);
 
-    // 6. Add custom domains to Cloudflare Pages project (only active domains)
-    const projectDomains = (project as { project_domains?: Array<{ is_active?: boolean; domains?: { domain_name: string } }> }).project_domains;
-    if (projectDomains && projectDomains.length > 0) {
-      const { getCloudflareClient } = await import('@/lib/cloudflare/client');
-      const cfClient = getCloudflareClient();
+    // 7. Add custom domains to Cloudflare Pages project (only active domains)
+    const projectDomains = project.project_domains as Array<{
+      is_active?: boolean;
+      domains?: { domain_name: string }
+    }> | undefined;
 
+    if (projectDomains && projectDomains.length > 0) {
       for (const pd of projectDomains) {
-        // Only add active domains
         if (pd.is_active !== false && pd.domains?.domain_name) {
           try {
             await cfClient.addCustomDomain(cfProjectName, pd.domains.domain_name);
-            console.log(`Added custom domain: ${pd.domains.domain_name}`);
-          } catch (domainError) {
-            // Non-critical: log but don't fail deployment
-            console.warn(`Failed to add domain ${pd.domains.domain_name}:`, domainError);
+          } catch {
+            // Non-critical: domain might already be added
           }
         }
       }
@@ -186,29 +135,15 @@ export async function deployProject(projectId: string): Promise<DeployResult> {
       success: false,
       error: errorMessage,
     };
-  } finally {
-    // Cleanup temp directory
-    if (tempDir) {
-      try {
-        await rm(tempDir, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
   }
 }
 
 /**
- * Generate static files for all pages
- * Structure:
- * - index.html (main page, slug = 'index')
- * - about/index.html (other pages)
- * - robots.txt
+ * Generate static files in memory
+ * Returns: Record<path, content>
  */
-async function generateStaticFiles(
-  tempDir: string,
-  project: ProjectWithPages
-): Promise<void> {
+function generateStaticFiles(project: ProjectWithPages): Record<string, string> {
+  const files: Record<string, string> = {};
   const pages = project.project_pages || [];
   const globalHeadCode = project.global_head_code || '';
   const globalBodyCode = project.global_body_code || '';
@@ -225,22 +160,18 @@ async function generateStaticFiles(
 
     if (page.slug === 'index') {
       // Main page goes to root
-      await writeFile(join(tempDir, 'index.html'), processedHtml, 'utf-8');
+      files['index.html'] = processedHtml;
     } else {
       // Other pages go to slug/index.html for clean URLs
-      const pageDir = join(tempDir, page.slug);
-      await mkdir(pageDir, { recursive: true });
-      await writeFile(join(pageDir, 'index.html'), processedHtml, 'utf-8');
+      files[`${page.slug}/index.html`] = processedHtml;
     }
   }
 
   // Generate robots.txt
-  await writeFile(
-    join(tempDir, 'robots.txt'),
-    `User-agent: *
-Allow: /`,
-    'utf-8'
-  );
+  files['robots.txt'] = `User-agent: *
+Allow: /`;
+
+  return files;
 }
 
 /**
@@ -260,7 +191,6 @@ function injectGlobalCode(
     if (result.includes('</head>')) {
       result = result.replace('</head>', `${headCode}\n</head>`);
     } else if (result.includes('<body>')) {
-      // If no </head>, inject before <body>
       result = result.replace('<body>', `${headCode}\n<body>`);
     }
   }
@@ -270,7 +200,6 @@ function injectGlobalCode(
     if (result.includes('</body>')) {
       result = result.replace('</body>', `${bodyCode}\n</body>`);
     } else {
-      // If no </body>, append at the end
       result = `${result}\n${bodyCode}`;
     }
   }
